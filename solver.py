@@ -2,6 +2,7 @@
 
 import sys
 import numpy as np
+from parser import Parser
 
 '''
 Solve the Alignment with Affine Gap Penalties Problem.
@@ -19,89 +20,100 @@ Sample Output:
      PRTWPSEIN-
 '''
 
+INF = 1000000
+
 class NeedleSolver:
     def __init__(self):
-        self._input()
-        maxScore, s1, s2 = self.computeCLS(self.seq1, self.seq2)
-        print(maxScore)
-        print(s1)
-        print(s2)
-
-    def _input(self):
-        self.seq1, self.seq2 = sys.stdin.read().strip().split('\n')
-        self.seq1 = self.seq1.strip()
-        self.seq2 = self.seq2.strip()
+        self.read_input_files()
+        
+        self.scoring_matrix_file = "ednafull.txt"
+        self.gap_opening_penalty = 10
+        self.gap_extension_penalty = 0.5
     
-    def scoringMatrix(self): # BLOSUM62 scoring matrix
-        sMatrixTxt = '''
-   A  C  D  E  F  G  H  I  K  L  M  N  P  Q  R  S  T  V  W  Y
-A  4  0 -2 -1 -2  0 -2 -1 -1 -1 -1 -2 -1 -1 -1  1  0  0 -3 -2
-C  0  9 -3 -4 -2 -3 -3 -1 -3 -1 -1 -3 -3 -3 -3 -1 -1 -1 -2 -2
-D -2 -3  6  2 -3 -1 -1 -3 -1 -4 -3  1 -1  0 -2  0 -1 -3 -4 -3
-E -1 -4  2  5 -3 -2  0 -3  1 -3 -2  0 -1  2  0  0 -1 -2 -3 -2
-F -2 -2 -3 -3  6 -3 -1  0 -3  0  0 -3 -4 -3 -3 -2 -2 -1  1  3
-G  0 -3 -1 -2 -3  6 -2 -4 -2 -4 -3  0 -2 -2 -2  0 -2 -3 -2 -3
-H -2 -3 -1  0 -1 -2  8 -3 -1 -3 -2  1 -2  0  0 -1 -2 -3 -2  2
-I -1 -1 -3 -3  0 -4 -3  4 -3  2  1 -3 -3 -3 -3 -2 -1  3 -3 -1
-K -1 -3 -1  1 -3 -2 -1 -3  5 -2 -1  0 -1  1  2  0 -1 -2 -3 -2
-L -1 -1 -4 -3  0 -4 -3  2 -2  4  2 -3 -3 -2 -2 -2 -1  1 -2 -1
-M -1 -1 -3 -2  0 -3 -2  1 -1  2  5 -2 -2  0 -1 -1 -1  1 -1 -1
-N -2 -3  1  0 -3  0  1 -3  0 -3 -2  6 -2  0  0  1  0 -3 -4 -2
-P -1 -3 -1 -1 -4 -2 -2 -3 -1 -3 -2 -2  7 -1 -2 -1 -1 -2 -4 -3
-Q -1 -3  0  2 -3 -2  0 -3  1 -2  0  0 -1  5  1  0 -1 -2 -2 -1
-R -1 -3 -2  0 -3 -2  0 -3  2 -2 -1  0 -2  1  5 -1 -1 -3 -3 -2
-S  1 -1  0  0 -2  0 -1 -2  0 -2 -1  1 -1  0 -1  4  1 -2 -3 -2
-T  0 -1 -1 -1 -2 -2 -2 -1 -1 -1 -1  0 -1 -1 -1  1  5  0 -2 -2
-V  0 -1 -3 -2 -1 -3 -3  3 -2  1  1 -3 -2 -2 -3 -2  0  4 -3 -1
-W -3 -2 -4 -3  1 -2 -2 -3 -3 -2 -1 -4 -4 -2 -3 -3 -2 -3 11  2
-Y -2 -2 -3 -2  3 -3  2 -1 -2 -1 -1 -2 -3 -1 -2 -2 -2 -1  2  7
-'''
+        for seq1, seq2 in zip(self.seq_list1, self.seq_list2):
+            
+            if len(seq1) > len(seq2):
+                # print("here1")
+                maxScore, backtrack, i, j = self.LCSBackTrack(seq1, seq2)
+                s1, s2 = self.OutputLCS(backtrack, seq1, seq2, i, j)
+                # maxScore, s1, s2 = self.computeCLS(seq1, seq2) 
+            else:
+                # print("here2")
+                # print(f"Seq 1: {seq1} Len: {len(seq1)}")
+                # print(f"Seq 2: {seq2} Len: {len(seq2)}")
+                maxScore, backtrack, i, j = self.LCSBackTrack(seq2, seq1)
+                # print(f"Backtrack size: i={len(backtrack)} | j={len(backtrack[0])}")
+                # print(f"i={i} | j={j}")
+                s1, s2 = self.OutputLCS(backtrack, seq2, seq1, i-1, j-1)
+                # maxScore, s1, s2 = self.computeCLS(seq2, seq1) 
+            
+            
+            print(maxScore)
+            print(s1)
+            print(s2)
+            
+            print("\n")
+
+    def read_input_files(self):
+        if len(sys.argv) < 3:
+            print("Expected 2 arguments got 1. Please enter name of files")
+            sys.exit(1)
+        
+        parser = Parser()
+        self.seq_list1 = parser.parse_file(sys.argv[1])
+        self.seq_list2 = parser.parse_file(sys.argv[2])
+    
+    def scoring_matrix(self):
+        sMatrixTxt = open(self.scoring_matrix_file, "r").read()
         sMatrixList = sMatrixTxt.strip().split('\n')
         aaList = sMatrixList[0].split()
         sMatrix = dict()
+        
         for aa in aaList:
             sMatrix[aa] = dict()
+        
         for i in range(1, len(aaList) + 1):
             currRow = sMatrixList[i].split()
             for j in range(len(aaList)):
                 sMatrix[currRow[0]][aaList[j]] = int(currRow[j + 1])
+        
         return sMatrix
 
-    def LCSBackTrack(self, v, w, sigma = 11, epsilon = 1, inf = 1000000):
-        sMatrix = self.scoringMatrix()
+    def LCSBackTrack(self, v, w):
+        sMatrix = self.scoring_matrix()
         n = len(v)
         m = len(w)
-        sLower = np.matrix(-inf*np.ones((n+1)*(m+1), dtype = np.int).reshape((n+1, m+1)))
-        sMiddle = np.matrix(-inf*np.ones((n+1)*(m+1), dtype = np.int).reshape((n+1, m+1)))
-        sUpper = np.matrix(-inf*np.ones((n+1)*(m+1), dtype = np.int).reshape((n+1, m+1)))
+        sLower = np.matrix(-INF * np.ones((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
+        sMiddle = np.matrix(-INF * np.ones((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
+        sUpper = np.matrix(-INF * np.ones((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         s = [sLower, sMiddle, sUpper]
-        backtrackLower = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int).reshape((n+1, m+1)))
-        backtrackMiddle = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int).reshape((n+1, m+1)))
-        backtrackUpper = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int).reshape((n+1, m+1)))
+        backtrackLower = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
+        backtrackMiddle = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
+        backtrackUpper = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         backtrack = [backtrackLower, backtrackMiddle, backtrackUpper]
         s[0][0, 0] = 0
         s[1][0, 0] = 0
         s[2][0, 0] = 0
-        s[0][1, 0] = -sigma
-        s[1][1, 0] = -sigma
+        s[0][1, 0] = -self.gap_opening_penalty
+        s[1][1, 0] = -self.gap_opening_penalty
         for i in range(2, n+1):
-            s[0][i, 0] = s[0][i-1, 0] - epsilon
+            s[0][i, 0] = s[0][i-1, 0] - self.gap_extension_penalty
             s[1][i, 0] = s[0][i, 0]
-        s[2][0, 1] = -sigma
-        s[1][0, 1] = -sigma
+        s[2][0, 1] = -self.gap_opening_penalty
+        s[1][0, 1] = -self.gap_opening_penalty
         for j in range(2, m+1):
-            s[2][0, j] = s[2][0, j-1] - epsilon
+            s[2][0, j] = s[2][0, j-1] - self.gap_extension_penalty
             s[1][0, j] = s[2][0, j]
         for i in range(1, n+1):
             for j in range(1, m+1):
-                score1 = s[0][i-1, j] - epsilon
-                score2 = s[1][i-1, j] - sigma
+                score1 = s[0][i-1, j] - self.gap_extension_penalty
+                score2 = s[1][i-1, j] - self.gap_opening_penalty
                 lowerScore = max(score1, score2)
                 s[0][i, j] = lowerScore
                 if lowerScore == score2:
                     backtrack[0][i, j] = 1 # From middle
-                score1 = s[2][i, j-1] - epsilon
-                score2 = s[1][i, j-1] - sigma
+                score1 = s[2][i, j-1] - self.gap_extension_penalty
+                score2 = s[1][i, j-1] - self.gap_opening_penalty
                 upperScore = max(score1, score2)
                 s[2][i, j] = upperScore
                 if upperScore == score2:
@@ -120,7 +132,7 @@ Y -2 -2 -3 -2  3 -3  2 -1 -2 -1 -1 -2 -3 -1 -2 -2 -2 -1  2  7
         s1 = ''
         s2 = ''
         level = 1 # middle
-        while i > 0 or j > 0:
+        while i > 0 and j > 0:
             if 0 == level:
                 if 1 == backtrack[0][i, j]:
                     level = 1
@@ -139,9 +151,16 @@ Y -2 -2 -3 -2  3 -3  2 -1 -2 -1 -1 -2 -3 -1 -2 -2 -2 -1  2  7
                 if 1 == backtrack[1][i, j]:
                     i -= 1
                     j -= 1
+                    # try:
+                        # if (i)
+                        
                     s1 = v[i] + s1
                     s2 = w[j] + s2
                     continue
+                    # except IndexError:
+                    #     print(f"i={i} | j={j}")
+                    #     print(f"v={v}\nw={w}")
+                    #     sys.exit(1)
                 else:
                     level = backtrack[1][i, j]
         return s1, s2
