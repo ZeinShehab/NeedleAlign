@@ -3,6 +3,7 @@
 import sys
 import numpy as np
 from parser import Parser
+from tqdm import tqdm
 
 INF = 1000000
 
@@ -20,36 +21,38 @@ class NeedleSolver:
     def find_best_alignment(self):
         print("[*] Beginning allignment...\n")
         
-        n = len(self.seq_list1)
+        node_names_1 = self.node_list1.keys()
+        node_names_2 = self.node_list2.keys()
         
-        for seq1_idx in range(n):
-            seq1 = self.seq_list1[seq1_idx]
-            
-            best_score = 0
-            best_seq2 = ""
-            best_seq1_idx = -1
-            best_seq2_idx = -1
-            results = ()
-            
-            m = len(self.seq_list2)
-            for seq2_idx in range(m):
-                seq2 = self.seq_list2[seq2_idx]
+        for node1 in node_names_1:
+            for node2 in node_names_2:
+                seq1 = self.node_list1[node1]
+                seq2 = self.node_list2[node2]
                 
-                score, backtrack, i, j = self.LCSBackTrack(seq1, seq2)
+                best_score, s1, s2 = self.computeCLS(seq1, seq2)
                 
-                if score > best_score:
-                    best_score = score
-                    results = (backtrack, i, j)
-                    best_seq2 = seq2
-                    best_seq2_idx = seq2_idx
-                    
-            backtrack, i, j = results
-            s1, s2 = self.OutputLCS(backtrack, seq1, best_seq2, i, j)
+                max_name_len = int(max(len(node1), len(node2)))
+                print(f"Best score: {best_score}")
+                output_s1 = [s1[i:i+50] for i in range(0, len(s1), 50)]
+                output_s2 = [s2[i:i+50] for i in range(0, len(s2), 50)]
+                
+                for i in range(len(output_s1)):
+                    print(f"{node1:<{max_name_len}} | {output_s1[i]:<51}")
+                    print(f"{node2:<{max_name_len}} | {output_s2[i]:<51}")            
+                    print("\n")
+                
+                self.write_output("output.txt", node1, node2, s1, s2)
+
+    def write_output(self, filename, node1, node2, s1, s2):
+        with open(filename, 'a+') as file:
+            max_name_len = int(max(len(node1), len(node2)))
+            output_s1 = [s1[i:i+50] for i in range(0, len(s1), 50)]
+            output_s2 = [s2[i:i+50] for i in range(0, len(s2), 50)]
             
-            print(f"Best score: {best_score}")
-            print(f"Line: {seq1_idx:<5} | {s1}")
-            print(f"Line: {best_seq2_idx:<5} | {s2}")            
-            print("\n")
+            for i in range(len(output_s1)):
+                file.write(f"{node1:<{max_name_len}} | {output_s1[i]:<51}\n")
+                file.write(f"{node2:<{max_name_len}} | {output_s2[i]:<51}\n")            
+                file.write("\n")
 
     def read_input_files(self):
         if len(sys.argv) < 3:
@@ -58,15 +61,8 @@ class NeedleSolver:
         
         parser = Parser()
     
-        temp_seq_list1 = parser.parse_file(sys.argv[1])
-        temp_seq_list2 = parser.parse_file(sys.argv[2])
-        
-        if len(temp_seq_list1[0]) > len(temp_seq_list2[0]):
-            self.seq_list1 = temp_seq_list1
-            self.seq_list2 = temp_seq_list2
-        else:
-            self.seq_list1 = temp_seq_list2
-            self.seq_list2 = temp_seq_list1
+        self.node_list1 = parser.parse_nosplit(sys.argv[1])
+        self.node_list2 = parser.parse_nosplit(sys.argv[2])
     
     def scoring_matrix(self):
         sMatrixTxt = open(self.scoring_matrix_file, "r").read()
@@ -88,44 +84,56 @@ class NeedleSolver:
         sMatrix = self.scoring_matrix()
         n = len(v)
         m = len(w)
+        
         sLower = np.matrix(-INF * np.ones((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         sMiddle = np.matrix(-INF * np.ones((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         sUpper = np.matrix(-INF * np.ones((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         s = [sLower, sMiddle, sUpper]
+        
         backtrackLower = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         backtrackMiddle = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         backtrackUpper = np.matrix(np.zeros((n+1)*(m+1), dtype = np.int64).reshape((n+1, m+1)))
         backtrack = [backtrackLower, backtrackMiddle, backtrackUpper]
+        
         s[0][0, 0] = 0
         s[1][0, 0] = 0
         s[2][0, 0] = 0
         s[0][1, 0] = -self.gap_opening_penalty
         s[1][1, 0] = -self.gap_opening_penalty
+        
         for i in range(2, n+1):
             s[0][i, 0] = s[0][i-1, 0] - self.gap_extension_penalty
             s[1][i, 0] = s[0][i, 0]
+            
         s[2][0, 1] = -self.gap_opening_penalty
         s[1][0, 1] = -self.gap_opening_penalty
+        
         for j in range(2, m+1):
             s[2][0, j] = s[2][0, j-1] - self.gap_extension_penalty
             s[1][0, j] = s[2][0, j]
-        for i in range(1, n+1):
+            
+        for i in tqdm(range(1, n+1)):
             for j in range(1, m+1):
                 score1 = s[0][i-1, j] - self.gap_extension_penalty
                 score2 = s[1][i-1, j] - self.gap_opening_penalty
                 lowerScore = max(score1, score2)
                 s[0][i, j] = lowerScore
+                
                 if lowerScore == score2:
                     backtrack[0][i, j] = 1 # From middle
+                    
                 score1 = s[2][i, j-1] - self.gap_extension_penalty
                 score2 = s[1][i, j-1] - self.gap_opening_penalty
                 upperScore = max(score1, score2)
+                
                 s[2][i, j] = upperScore
                 if upperScore == score2:
                     backtrack[2][i, j] = 1 # From middle
+                    
                 score3 = s[1][i-1, j-1] + sMatrix[v[i-1]][w[j-1]]
                 middleScore = max(lowerScore, score3, upperScore)
                 s[1][i, j] = middleScore
+                
                 if middleScore == score3:
                     backtrack[1][i, j] = 1 # From middle
                 elif middleScore == upperScore:
@@ -156,23 +164,24 @@ class NeedleSolver:
                 if 1 == backtrack[1][i, j]:
                     i -= 1
                     j -= 1
-                    # try:
-                        # if (i)
-                        
                     s1 = v[i] + s1
                     s2 = w[j] + s2
                     continue
-                    # except IndexError:
-                    #     print(f"i={i} | j={j}")
-                    #     print(f"v={v}\nw={w}")
-                    #     sys.exit(1)
                 else:
                     level = backtrack[1][i, j]
         return s1, s2
     
     def computeCLS(self, seq1, seq2):
-        maxSocre, backtrack, i, j = self.LCSBackTrack(seq1, seq2)
-        s1, s2 = self.OutputLCS(backtrack, seq1, seq2, i, j)
+        
+        if len(seq1) > len(seq2):
+            s = seq1
+            t = seq2
+        else:
+            s = seq2
+            t = seq1
+        
+        maxSocre, backtrack, i, j = self.LCSBackTrack(s, t)
+        s1, s2 = self.OutputLCS(backtrack, s, t, i, j)
         return maxSocre, s1, s2
 
 if __name__ == "__main__":
