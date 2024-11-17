@@ -4,22 +4,6 @@ import sys
 import numpy as np
 from parser import Parser
 
-'''
-Solve the Alignment with Affine Gap Penalties Problem.
-     Input: Two amino acid strings v and w (each of length at most 100).
-     Output: The maximum alignment score between v and w, followed by an alignment of v and w achieving this maximum score. Use the
-     BLOSUM62 scoring matrix, a gap opening penalty of 11, and a gap extension penalty of 1.
-
-Sample Input:
-     PRTEINS
-     PRTWPSEIN
-
-Sample Output:
-     8
-     PRT---EINS
-     PRTWPSEIN-
-'''
-
 INF = 1000000
 
 class NeedleSolver:
@@ -30,28 +14,41 @@ class NeedleSolver:
         self.gap_opening_penalty = 10
         self.gap_extension_penalty = 0.5
     
-        for seq1, seq2 in zip(self.seq_list1, self.seq_list2):
+        self.find_best_alignment()
+
             
-            if len(seq1) > len(seq2):
-                # print("here1")
-                maxScore, backtrack, i, j = self.LCSBackTrack(seq1, seq2)
-                s1, s2 = self.OutputLCS(backtrack, seq1, seq2, i, j)
-                # maxScore, s1, s2 = self.computeCLS(seq1, seq2) 
-            else:
-                # print("here2")
-                # print(f"Seq 1: {seq1} Len: {len(seq1)}")
-                # print(f"Seq 2: {seq2} Len: {len(seq2)}")
-                maxScore, backtrack, i, j = self.LCSBackTrack(seq2, seq1)
-                # print(f"Backtrack size: i={len(backtrack)} | j={len(backtrack[0])}")
-                # print(f"i={i} | j={j}")
-                s1, s2 = self.OutputLCS(backtrack, seq2, seq1, i-1, j-1)
-                # maxScore, s1, s2 = self.computeCLS(seq2, seq1) 
+    def find_best_alignment(self):
+        print("[*] Beginning allignment...\n")
+        
+        n = len(self.seq_list1)
+        
+        for seq1_idx in range(n):
+            seq1 = self.seq_list1[seq1_idx]
             
+            best_score = 0
+            best_seq2 = ""
+            best_seq1_idx = -1
+            best_seq2_idx = -1
+            results = ()
             
-            print(maxScore)
-            print(s1)
-            print(s2)
+            m = len(self.seq_list2)
+            for seq2_idx in range(m):
+                seq2 = self.seq_list2[seq2_idx]
+                
+                score, backtrack, i, j = self.LCSBackTrack(seq1, seq2)
+                
+                if score > best_score:
+                    best_score = score
+                    results = (backtrack, i, j)
+                    best_seq2 = seq2
+                    best_seq2_idx = seq2_idx
+                    
+            backtrack, i, j = results
+            s1, s2 = self.OutputLCS(backtrack, seq1, best_seq2, i, j)
             
+            print(f"Best score: {best_score}")
+            print(f"Line: {seq1_idx:<5} | {s1}")
+            print(f"Line: {best_seq2_idx:<5} | {s2}")            
             print("\n")
 
     def read_input_files(self):
@@ -60,8 +57,16 @@ class NeedleSolver:
             sys.exit(1)
         
         parser = Parser()
-        self.seq_list1 = parser.parse_file(sys.argv[1])
-        self.seq_list2 = parser.parse_file(sys.argv[2])
+    
+        temp_seq_list1 = parser.parse_file(sys.argv[1])
+        temp_seq_list2 = parser.parse_file(sys.argv[2])
+        
+        if len(temp_seq_list1[0]) > len(temp_seq_list2[0]):
+            self.seq_list1 = temp_seq_list1
+            self.seq_list2 = temp_seq_list2
+        else:
+            self.seq_list1 = temp_seq_list2
+            self.seq_list2 = temp_seq_list1
     
     def scoring_matrix(self):
         sMatrixTxt = open(self.scoring_matrix_file, "r").read()
